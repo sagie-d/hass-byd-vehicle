@@ -457,9 +457,9 @@ class BydDataUpdateCoordinator(DataUpdateCoordinator[VehicleSnapshot]):
         self._car: BydCar | None = None
         self._realtime_endpoint_unsupported: bool = False
         self._cancel_hvac_final_retry: CALLBACK_TYPE | None = None
-        self.update_pending: bool = False
-        self._debounce_timer: CALLBACK_TYPE | None = None
-        self._pending_schedule_updates: dict[str, Any] = {}
+        self.charging_schedule_update_pending: bool = False
+        self._charging_schedule_update_debounce_timer: CALLBACK_TYPE | None = None
+        self._pending_charging_schedule_updates: dict[str, Any] = {}
 
     # ------------------------------------------------------------------
     # State-engine push
@@ -636,7 +636,7 @@ class BydDataUpdateCoordinator(DataUpdateCoordinator[VehicleSnapshot]):
         self._force_next_refresh = False
         previous_snapshot = self.data
 
-        if self.update_pending:
+        if self.charging_schedule_update_pending:
             _LOGGER.debug("Skipping telemetry refresh due to pending schedule update: vin=%s", self._vin[-6:])
             if self.data is not None:
                 return self.data
@@ -850,35 +850,35 @@ class BydDataUpdateCoordinator(DataUpdateCoordinator[VehicleSnapshot]):
                 exc,
             )
 
-    async def async_request_schedule_update(self, property_name: str, new_value: Any) -> None:
+    async def async_request_charging_schedule_update(self, property_name: str, new_value: Any) -> None:
         """Queue a debounced update for the charging schedule."""
-        self._pending_schedule_updates[property_name] = new_value
+        self._pending_charging_schedule_updates[property_name] = new_value
 
-        if self._debounce_timer is not None:
-            self._debounce_timer()
-            self._debounce_timer = None
+        if self._charging_schedule_update_debounce_timer is not None:
+            self._charging_schedule_update_debounce_timer()
+            self._charging_schedule_update_debounce_timer = None
 
-        self.update_pending = True
+        self.charging_schedule_update_pending = True
 
         @callback
         def _execute_update(_now: Any) -> None:
-            self._debounce_timer = None
-            self.hass.async_create_task(self._async_execute_schedule_update())
+            self._charging_schedule_update_debounce_timer = None
+            self.hass.async_create_task(self._async_execute_charging_schedule_update())
 
-        self._debounce_timer = async_call_later(
+        self._charging_schedule_update_debounce_timer = async_call_later(
             self.hass,
             10.0,
             _execute_update,
         )
 
-    async def _async_execute_schedule_update(self) -> None:
+    async def _async_execute_charging_schedule_update(self) -> None:
         """Execute the pending schedule update."""
-        if not self._pending_schedule_updates:
-            self.update_pending = False
+        if not self._pending_updates:
+            self.charging_schedule_update_pending = False
             return
 
         current_enabled = True
-        current_charge_to_full = True
+        current_scheduled_charge_to_full = True
         current_start_time = "22:00"
         current_end_time = "full"
         current_charge_way = "e"
@@ -888,7 +888,7 @@ class BydDataUpdateCoordinator(DataUpdateCoordinator[VehicleSnapshot]):
             if charge.status is not None:
                 current_enabled = charge.status
             if charge.charge_until_full is not None:
-                current_charge_to_full = charge.charge_until_full
+                current_scheduled_charge_to_full = charge.charge_until_full
             
             if charge.start_time is not None:
                 current_start_time = charge.start_time.strftime("%H:%M")
@@ -898,17 +898,17 @@ class BydDataUpdateCoordinator(DataUpdateCoordinator[VehicleSnapshot]):
             if charge.charge_way is not None:
                 current_charge_way = charge.charge_way
 
-        updates = self._pending_schedule_updates
+        updates = self._pending_charging_schedule_updates
         
         enabled = updates.get("enabled", current_enabled)
-        charge_to_full = updates.get("charge_to_full", current_charge_to_full)
+        scheduled_charge_to_full = updates.get("scheduled_charge_to_full", current_scheduled_charge_to_full)
         pattern = updates.get("pattern", current_charge_way)
-        start_time_obj = updates.get("start_time")
-        end_time_obj = updates.get("end_time")
+        start_time_obj = updates.get("charging_schedule_start_time")
+        end_time_obj = updates.get("charging_schedule_end_time")
 
         start_charge_time = start_time_obj.strftime("%H:%M") if start_time_obj else current_start_time
         
-        if charge_to_full:
+        if scheduled_charge_to_full:
             end_charge_time = "full"
         else:
             end_charge_time = end_time_obj.strftime("%H:%M") if end_time_obj else current_end_time
@@ -917,7 +917,7 @@ class BydDataUpdateCoordinator(DataUpdateCoordinator[VehicleSnapshot]):
 
         charge_way = pattern
 
-        self._pending_schedule_updates.clear()
+        self._pending_charging_schedule_updates.clear()
 
         try:
             await self.async_save_charging_schedule(
@@ -929,7 +929,7 @@ class BydDataUpdateCoordinator(DataUpdateCoordinator[VehicleSnapshot]):
         except Exception as exc:
             _LOGGER.error("Debounced schedule save failed: %s", exc)
         finally:
-            self.update_pending = False
+            self.charging_schedule_update_pending = False
             await self.async_request_refresh()
 
     async def async_save_charging_schedule(

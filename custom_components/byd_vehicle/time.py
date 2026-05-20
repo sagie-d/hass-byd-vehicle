@@ -28,17 +28,17 @@ async def async_setup_entry(
     entities: list[TimeEntity] = []
     for vin, coordinator in coordinators.items():
         vehicle = coordinator.vehicle
-        entities.append(BydStartTimeEntity(coordinator, vin, vehicle))
-        entities.append(BydEndTimeEntity(coordinator, vin, vehicle))
+        entities.append(BydChargeScheduleStartTimeEntity(coordinator, vin, vehicle))
+        entities.append(BydChargeScheduleEndTimeEntity(coordinator, vin, vehicle))
 
     async_add_entities(entities)
 
 
-class BydStartTimeEntity(BydVehicleEntity, TimeEntity):
-    """Time entity for charging start time."""
+class BydChargeScheduleStartTimeEntity(BydVehicleEntity, TimeEntity):
+    """Time entity for charging schedule start time."""
 
     _attr_has_entity_name = True
-    _attr_translation_key = "start_time"
+    _attr_translation_key = "charging_schedule_start_time"
     _attr_icon = "mdi:clock-start"
 
     def __init__(
@@ -71,14 +71,14 @@ class BydStartTimeEntity(BydVehicleEntity, TimeEntity):
         """Set the start time."""
         self._optimistic_state = value
         self.async_write_ha_state()
-        await self.coordinator.async_request_schedule_update("start_time", value)
+        await self.coordinator.async_request_charging_schedule_update("start_time", value)
 
 
-class BydEndTimeEntity(BydVehicleEntity, TimeEntity):
-    """Time entity for charging end time."""
+class BydChargeScheduleEndTimeEntity(BydVehicleEntity, TimeEntity):
+    """Time entity for charging schedule end time."""
 
     _attr_has_entity_name = True
-    _attr_translation_key = "end_time"
+    _attr_translation_key = "charging_schedule_end_time"
     _attr_icon = "mdi:clock-end"
 
     def __init__(
@@ -111,4 +111,4 @@ class BydEndTimeEntity(BydVehicleEntity, TimeEntity):
         """Set the end time."""
         self._optimistic_state = value
         self.async_write_ha_state()
-        await self.coordinator.async_request_schedule_update("end_time", value)
+        await self.coordinator.async_request_charging_schedule_update("charging_schedule_end_time", value)

@@ -538,17 +538,17 @@ def _async_register_services(hass: HomeAssistant) -> None:
 
         until_full = bool(call.data.get("until_full", True))
         start_charge_time = _normalise_hhmm(
-            call.data.get("start_time"), field="start_time"
+            call.data.get("charging_schedule_start_time"), field="charging_schedule_start_time"
         )
         if until_full:
             end_charge_time = "full"
         else:
-            raw_end = call.data.get("end_time")
+            raw_end = call.data.get("charging_schedule_end_time")
             if raw_end is None:
                 raise HomeAssistantError(
-                    "end_time is required when until_full is false"
+                    "charging_schedule_end_time is required when until_full is false"
                 )
-            end_charge_time = _normalise_hhmm(raw_end, field="end_time")
+            end_charge_time = _normalise_hhmm(raw_end, field="charging_schedule_end_time")
         charge_way = _resolve_charge_way(call)
         enabled = bool(call.data.get("enabled", True))
 
